@@ -1,0 +1,20 @@
+-- 000001_init.down.sql
+-- Rollback initial schema (drop in reverse dependency order)
+
+ALTER TABLE rankings DROP CONSTRAINT IF EXISTS fk_rankings_season;
+ALTER TABLE battles DROP CONSTRAINT IF EXISTS fk_battles_season;
+
+DROP TABLE IF EXISTS seasons CASCADE;
+DROP TABLE IF EXISTS rankings CASCADE;
+DROP TABLE IF EXISTS battles CASCADE;
+DROP TABLE IF EXISTS messages CASCADE;
+DROP TABLE IF EXISTS conversations CASCADE;
+DROP TABLE IF EXISTS episodic_memories CASCADE;
+DROP TABLE IF EXISTS spirit_profiles CASCADE;
+DROP TABLE IF EXISTS spirit_skills CASCADE;
+DROP TABLE IF EXISTS skills CASCADE;
+DROP TABLE IF EXISTS spirits CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+DROP EXTENSION IF EXISTS "pgcrypto";
+DROP EXTENSION IF EXISTS "uuid-ossp";

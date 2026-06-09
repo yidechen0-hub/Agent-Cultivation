@@ -1,0 +1,36 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/core/*/build/
+android/feature/*/build/
+android/local.properties
+android/captures/
+android/.externalNativeBuild/
+
+# Go
+services/*/tmp/
+services/*/vendor/
+
+# Python
+engine/**/__pycache__/
+engine/**/*.pyc
+engine/**/.venv/
+engine/**/.env
+
+# Infra
+infra/data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+.env.local
+*.env
