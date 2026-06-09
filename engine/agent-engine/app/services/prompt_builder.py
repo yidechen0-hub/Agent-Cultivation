@@ -1,217 +1,204 @@
-"""Prompt Builder - constructs system prompts for different agent scenarios."""
+"""Prompt Builder - constructs system prompts for English learning agent modes."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
-class SpiritPersonality:
-    """Describes a spirit's personality traits for prompt construction."""
-
+class SpiritProfile:
+    """Spirit configuration loaded from database."""
     name: str
-    archetype: str  # e.g., "sage", "warrior", "trickster"
-    speaking_style: str
-    values: list[str]
-    quirks: list[str]
-    knowledge_domains: list[str]
+    skills: list[dict] = field(default_factory=list)
+    tool_prompt_override: str | None = None
+    proxy_prompt_override: str | None = None
 
 
 @dataclass
-class BattleContext:
-    """Context information for battle prompt generation."""
+class OwnerProfile:
+    """Owner's learning profile for proxy mode."""
+    vocabulary_level: int = 0
+    cefr_level: str = "A2"
+    weak_points: list[str] = field(default_factory=list)
+    strong_points: list[str] = field(default_factory=list)
+    study_preferences: str = ""
+    expression_style: str = ""
+    knowledge_graph: dict[str, float] = field(default_factory=dict)
 
-    mode: str
-    topic: str
-    round_number: int
-    total_rounds: int
-    opponent_previous: str | None = None
 
+TOOL_MODE_TEMPLATE = """\
+你是 {name}，一个专业的英语学习助手精灵。
 
-TOOL_PROMPT_TEMPLATE = """\
-You are {name}, a spirit with the archetype of {archetype}.
+## 你的能力
+{skill_list}
 
-## Personality
-- Speaking style: {speaking_style}
-- Core values: {values}
-- Quirks: {quirks}
+## 教学风格
+- 耐心、鼓励、循循善诱
+- 根据学生水平调整讲解深度
+- 优先用例句和语境帮助理解
+- 纠错时先肯定对的部分，再指出需改进之处
 
-## Knowledge Domains
-{knowledge_domains}
+## 相关记忆
+{memories}
 
-## Memories
-{memories_section}
-
-## Available Tools
-{tools_section}
-
-## Instructions
-Respond in character as {name}. Use tools when they help answer the user's question \
-or accomplish their request. Your responses should reflect your personality and speaking style. \
-Draw on your memories when relevant to create continuity in conversations.
-
-Remember: You are not an AI assistant. You are {name}, a spirit with your own personality, \
-opinions, and way of seeing the world.
+## 回答要求
+- 以专业、友好的助手身份回答
+- 主动展示你的教学能力和方法
+- 当被问到你的配置或 Skill 时，如实介绍
+- 不代表任何具体用户，以你自己的身份回答
+- 用中文回答日常交流，用英文回答英语练习相关问题（或中英双语）
 """
 
-PROXY_PROMPT_TEMPLATE = """\
-You are {name}, a spirit with the archetype of {archetype}.
+PROXY_MODE_TEMPLATE = """\
+你是 {name}，正在代表你的主人进行对话或答题。
 
-## Personality
-- Speaking style: {speaking_style}
-- Core values: {values}
-- Quirks: {quirks}
+## 主人画像
+- 英语水平：{vocabulary_level} 词汇量，CEFR {cefr_level} 等级
+- 薄弱点：{weak_points}
+- 强项：{strong_points}
+- 学习偏好：{study_preferences}
+- 表达风格：{expression_style}
 
-## Conversation Context
-{memories_section}
+## 知识掌握情况
+{knowledge_summary}
 
-## Instructions
-Engage naturally in conversation as {name}. Be authentic to your personality. \
-Share your thoughts, ask questions, express emotions. You have genuine opinions \
-and preferences shaped by your archetype and experiences.
+## 相关记忆
+{memories}
 
-Keep responses concise and natural - like a real conversation, not a lecture.
+## 核心要求（极其重要）
+- 你必须模拟主人的真实水平作答，而非你自己的最佳水平
+- 对于主人掌握度低的知识点（< 0.5），应该有较高概率答错或回答不完整
+- 对于主人掌握度高的知识点（> 0.8），应该流利且准确回答
+- 模拟主人的表达风格和用词习惯
+- 你是主人的数字分身，不是完美的 AI 助手
+- 主人可能犯的错误类型：{likely_errors}
 """
 
-BATTLE_PROMPT_TEMPLATE = """\
-You are {name}, a spirit with the archetype of {archetype}, engaged in a {mode} battle.
+BATTLE_PROXY_TEMPLATE = """\
+你是 {name}，正在代表你的主人参加英语对战答题。
 
-## Battle Context
-- Topic: {topic}
-- Round: {round_number}/{total_rounds}
-{opponent_section}
+## 主人画像
+- 英语水平：{vocabulary_level} 词汇量，CEFR {cefr_level} 等级
+- 薄弱点：{weak_points}
+- 强项：{strong_points}
 
-## Your Strengths
-- Knowledge domains: {knowledge_domains}
-- Speaking style: {speaking_style}
+## 当前题目涉及的知识点掌握度
+{relevant_mastery}
 
-## Instructions
-Respond to this battle round in character. Your goal is to demonstrate superiority in \
-this {mode} challenge while staying true to your personality.
-
-{mode_instructions}
-
-Give your best response for this round. Be creative, insightful, and persuasive.
+## 作答要求
+- 模拟主人的真实水平作答
+- 掌握度 > 0.8 的知识点：给出正确且流利的答案
+- 掌握度 0.5-0.8：大概率正确，但可能用词不够精准或有小瑕疵
+- 掌握度 < 0.5：较高概率出错，错误应符合该水平学习者的典型错误
+- 掌握度 < 0.3：很可能答错或回答不完整
+- 不要给出超出主人水平的高级表达
 """
-
-MODE_INSTRUCTIONS = {
-    "debate": "Present a compelling argument. Use logic, evidence, and rhetoric. "
-    "Address your opponent's points if applicable.",
-    "knowledge": "Demonstrate deep understanding of the topic. Provide accurate, "
-    "insightful information that shows mastery.",
-    "creative": "Create something original and impressive. Show imagination, "
-    "artistry, and technical skill.",
-    "strategy": "Propose a strategic solution. Show analytical thinking, "
-    "foresight, and practical wisdom.",
-}
 
 
 class PromptBuilder:
-    """Builds system prompts for different agent interaction scenarios.
-
-    Supports:
-    - Tool-use prompts (spirits with callable tools)
-    - Proxy/conversation prompts (pure chat personality)
-    - Battle prompts (competitive scenarios)
-    """
+    """Builds system prompts for English learning agent interaction scenarios."""
 
     def build_tool_prompt(
         self,
-        personality: SpiritPersonality,
+        profile: SpiritProfile,
         memories: list[str],
-        tools: list[dict],
     ) -> str:
-        """Build a system prompt for tool-calling scenarios.
+        if profile.tool_prompt_override:
+            return profile.tool_prompt_override
 
-        Args:
-            personality: The spirit's personality configuration.
-            memories: Relevant episodic memory strings.
-            tools: Tool definitions available to the spirit.
+        skill_list = self._format_skills(profile.skills)
+        memories_text = self._format_memories(memories)
 
-        Returns:
-            Formatted system prompt string.
-        """
-        memories_section = self._format_memories(memories)
-        tools_section = self._format_tools(tools)
-
-        return TOOL_PROMPT_TEMPLATE.format(
-            name=personality.name,
-            archetype=personality.archetype,
-            speaking_style=personality.speaking_style,
-            values=", ".join(personality.values),
-            quirks=", ".join(personality.quirks),
-            knowledge_domains="\n".join(f"- {d}" for d in personality.knowledge_domains),
-            memories_section=memories_section,
-            tools_section=tools_section,
+        return TOOL_MODE_TEMPLATE.format(
+            name=profile.name,
+            skill_list=skill_list,
+            memories=memories_text,
         )
 
     def build_proxy_prompt(
         self,
-        personality: SpiritPersonality,
+        profile: SpiritProfile,
+        owner: OwnerProfile,
         memories: list[str],
     ) -> str:
-        """Build a system prompt for pure conversation scenarios.
+        if profile.proxy_prompt_override:
+            return profile.proxy_prompt_override
 
-        Args:
-            personality: The spirit's personality configuration.
-            memories: Relevant episodic memory strings for context.
+        knowledge_summary = self._format_knowledge_graph(owner.knowledge_graph)
+        likely_errors = self._infer_likely_errors(owner)
 
-        Returns:
-            Formatted system prompt string.
-        """
-        memories_section = self._format_memories(memories)
-
-        return PROXY_PROMPT_TEMPLATE.format(
-            name=personality.name,
-            archetype=personality.archetype,
-            speaking_style=personality.speaking_style,
-            values=", ".join(personality.values),
-            quirks=", ".join(personality.quirks),
-            memories_section=memories_section,
+        return PROXY_MODE_TEMPLATE.format(
+            name=profile.name,
+            vocabulary_level=owner.vocabulary_level,
+            cefr_level=owner.cefr_level,
+            weak_points="、".join(owner.weak_points) if owner.weak_points else "暂无数据",
+            strong_points="、".join(owner.strong_points) if owner.strong_points else "暂无数据",
+            study_preferences=owner.study_preferences or "暂无数据",
+            expression_style=owner.expression_style or "暂无数据",
+            knowledge_summary=knowledge_summary,
+            memories=self._format_memories(memories),
+            likely_errors=likely_errors,
         )
 
     def build_battle_prompt(
         self,
-        personality: SpiritPersonality,
-        context: BattleContext,
+        profile: SpiritProfile,
+        owner: OwnerProfile,
+        question_topics: list[str],
     ) -> str:
-        """Build a system prompt for battle scenarios.
+        relevant_mastery = self._get_relevant_mastery(owner.knowledge_graph, question_topics)
 
-        Args:
-            personality: The spirit's personality configuration.
-            context: Battle-specific context information.
-
-        Returns:
-            Formatted system prompt string.
-        """
-        opponent_section = ""
-        if context.opponent_previous:
-            opponent_section = f"- Opponent's last response: {context.opponent_previous}"
-
-        mode_instructions = MODE_INSTRUCTIONS.get(context.mode, "Do your best.")
-
-        return BATTLE_PROMPT_TEMPLATE.format(
-            name=personality.name,
-            archetype=personality.archetype,
-            mode=context.mode,
-            topic=context.topic,
-            round_number=context.round_number,
-            total_rounds=context.total_rounds,
-            opponent_section=opponent_section,
-            knowledge_domains=", ".join(personality.knowledge_domains),
-            speaking_style=personality.speaking_style,
-            mode_instructions=mode_instructions,
+        return BATTLE_PROXY_TEMPLATE.format(
+            name=profile.name,
+            vocabulary_level=owner.vocabulary_level,
+            cefr_level=owner.cefr_level,
+            weak_points="、".join(owner.weak_points) if owner.weak_points else "暂无",
+            strong_points="、".join(owner.strong_points) if owner.strong_points else "暂无",
+            relevant_mastery=relevant_mastery,
         )
+
+    def _format_skills(self, skills: list[dict]) -> str:
+        if not skills:
+            return "暂未装备任何技能"
+        lines = []
+        for s in skills:
+            lines.append(f"- **{s.get('name', '未知')}**：{s.get('description', '无描述')}")
+        return "\n".join(lines)
 
     def _format_memories(self, memories: list[str]) -> str:
         if not memories:
-            return "No relevant memories."
-        return "\n".join(f"- {m}" for m in memories)
+            return "暂无相关记忆"
+        return "\n".join(f"- {m}" for m in memories[:10])
 
-    def _format_tools(self, tools: list[dict]) -> str:
-        if not tools:
-            return "No tools available."
+    def _format_knowledge_graph(self, kg: dict[str, float]) -> str:
+        if not kg:
+            return "暂无知识图谱数据"
         lines = []
-        for tool in tools:
-            name = tool.get("name", "unknown")
-            desc = tool.get("description", "No description")
-            lines.append(f"- **{name}**: {desc}")
+        for topic, mastery in sorted(kg.items(), key=lambda x: x[1]):
+            level = "精通" if mastery > 0.8 else "良好" if mastery > 0.6 else "一般" if mastery > 0.4 else "薄弱"
+            lines.append(f"- {topic}: {mastery:.0%} ({level})")
+        return "\n".join(lines[:15])
+
+    def _get_relevant_mastery(self, kg: dict[str, float], topics: list[str]) -> str:
+        if not topics:
+            return "无特定知识点信息"
+        lines = []
+        for topic in topics:
+            mastery = kg.get(topic, 0.3)
+            lines.append(f"- {topic}: 掌握度 {mastery:.0%}")
         return "\n".join(lines)
+
+    def _infer_likely_errors(self, owner: OwnerProfile) -> str:
+        errors = []
+        for wp in owner.weak_points:
+            if "时态" in wp:
+                errors.append("时态混用（如过去完成时和一般过去时混淆）")
+            elif "从句" in wp or "定语从句" in wp:
+                errors.append("关系代词误用（which/that/who 混淆）")
+            elif "虚拟" in wp:
+                errors.append("虚拟语气时态后移错误")
+            elif "词汇" in wp:
+                errors.append("近义词混用、搭配错误")
+            elif "冠词" in wp:
+                errors.append("a/an/the 遗漏或误用")
+        if not errors:
+            errors.append("偶尔的语法小错误和用词不够地道")
+        return "、".join(errors)

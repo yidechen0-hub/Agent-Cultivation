@@ -1,18 +1,25 @@
 """Agent Engine - FastAPI application entry point."""
 
+import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv()
 
 from app.routers import chat, battle, spirit
+from app.dependencies import init_services
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # Startup: initialize connections
+    # Startup: initialize service instances
+    await init_services()
     yield
-    # Shutdown: close connections
+    # Shutdown: cleanup (connections auto-close)
 
 
 app = FastAPI(
@@ -20,6 +27,14 @@ app = FastAPI(
     description="AI agent engine powering spirit cultivation, battles, and conversations",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
@@ -34,11 +49,10 @@ async def health_check() -> dict[str, str]:
 
 @app.get("/ready")
 async def readiness_check() -> dict[str, str]:
-    # TODO: check downstream dependencies (DB, Redis, Qdrant, NATS)
     return {"status": "ready"}
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8100, reload=True)
